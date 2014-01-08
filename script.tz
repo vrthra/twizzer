@@ -1,0 +1,59 @@
+| mymain []
+Welcome to Twiz.
+> admin | users u1,u2,u3,u4
+> admin | allusers
+u1
+u2
+u3
+u4
+> admin | create twiz1 my content of first twiz
+> admin | create twiz2 my content of second twiz
+> admin | create twiz3 my content of third twiz
+> admin | create twiz4 my content of fourth twiz
+> u1 | twiz list
+Twiz twiz1      : setup
+Twiz twiz2      : setup
+Twiz twiz3      : setup
+Twiz twiz4      : setup
+> admin | update twiz1 due 2012-10-10 review 2012-10-12
+> admin | update twiz2 due 2012-10-10 review 2012-10-12
+> admin | update twiz3 due 2012-10-10 review 2012-10-12
+> admin | update twiz4 due 2012-10-10 review 2012-10-12
+> admin | update twiz2 assign u1 to u2,u3
+> admin | update twiz2 assign u2 to u3,u4
+> admin | update twiz2 assign u3 to u4,u1
+> admin | update twiz2 assign u4 to u1,u2
+> admin | update twiz2 to task
+> admin | buddies twiz2
+u1: u2 u3
+u2: u3 u4
+u3: u4 u1
+u4: u1 u2
+> admin | update twiz2 to task
+> u1 | twiz twiz2 answer My solution to worlds famine
+> u2 | twiz twiz2 answer My solution to worlds famine
+> u3 | twiz twiz2 answer My solution to worlds famine3
+> u4 | twiz twiz2 answer My solution to worlds famine4
+> u4 | twiz twiz2 toreview
+u2
+u3
+> u4 | twiz twiz2 get u2 solution
+Twiz at task operation not allowed.
+> admin | update twiz2 to review
+> u4 | twiz twiz2 get u2 solution
+My solution to worlds famine
+> u4 | twiz twiz2 for u2 review My review to u2's solution
+> u2 | twiz twiz2 reviews
+Twiz at review operation not allowed.
+> admin | update twiz2 to closing
+> u2 | twiz twiz2 reviews
+u3:
+-
+u4:
+ My review to u2's solution
+> u1 | twiz list
+Twiz twiz1      : setup
+Twiz twiz2      : closing
+Twiz twiz3      : setup
+Twiz twiz4      : setup
+

@@ -1,2 +1,1 @@
-:def v (\_ -> return ":e Main.lhs \n :load Main.lhs")
 :set -isrc:db -isrc:.

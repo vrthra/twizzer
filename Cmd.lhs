@@ -1,11 +1,36 @@
 > module Cmd where
-
 > import Text.ParserCombinators.Parsec
-> import Utils
+> import Common
 > import Data.Time
 > import Data.Time.Clock.POSIX
 > import Data.Time.Format
 > import System.Locale
+
+A parser for twiz commands. Note that this is different from the Protocol parsers as explained earlier.
+
+We support the following commands for users.
+
+twiz list                              list all twizes     (*)
+twiz <tid> show                        show the twiz       (*)
+twiz <tid> toreview                    show my buddies     (task)
+twiz <tid> answer <content>            submit my answer    (task)
+twiz <tid> get <uid> solution          get solution by uid (review)
+twiz <tid> for <uid> review <content>  submit review       (review)
+twiz <tid> reviews                     show reviews for me (closing)
+twiz <tid> upload <file>               submit my answer    (task)
+twiz <tid> for <uid> upload <file>     submit my review    (review)
+
+And the following for admin
+
+users u1,u2,u3..                                   ()
+allusers                                           ()
+save <file>                                        ()
+load <file>                                        ()
+create <tid> <content>                             ()
+update <tid> due <date> review <date>              ()
+update <tid> to <task|reiew|closing|setup>         ()
+update <tid> assign <user> <to> buddy1,buddy2,..   ()
+buddies <tid>                  show buddy assign   ()
 
 
 > data Cmd = TUnknown String
@@ -18,154 +43,129 @@
 >           | TShowSoln String String
 >           | TShowReviews String
 >           | TSubmit String String
+>           | TSubmitU String String
 >           | TSubmitReview String String String
+>           | TSubmitReviewU String String String
 >           | TShowAssign String
 >           | TAddU [String]
+>           | TSave String
+>           | TLoad String
+>           | TBuddy String
 >           | TUpdate String Day Day
 >           | TUpdateTask String String
 >   deriving (Show, Eq)
 
-> nulldate = (readTime defaultTimeLocale "%F" "0000-00-00") :: Day
- 
 > readCmd :: String -> Cmd
 > readCmd i = case parse cmd "twizcmd" i of
 >   Left err -> TUnknown (show err)
 >   Right val -> val
 
 > cmd :: Parser Cmd
-> cmd = (try parseCreate)
->       <|> (try parseHelpT)
->       <|> (try parseListT)
->       <|> (try parseListUT)
->       <|> (try parseAddUT)
->       <|> (try parseShowT)
->       <|> (try parseShowSolnT)
->       <|> (try parseShowReviewsT)
->       <|> (try parseSubmitT)
->       <|> (try parseSubmitReviewT)
->       <|> (try parseUpdateT)
->       <|> (try parseUpTaskT)
->       <|> (try parseAssignT)
->       <|> (try parseShowAssignT)
->       <|> (try parseRest)
-
-> pT :: Parser String
-> pT = many1 anyChar
+> cmd = try parseCreate
+>       <|> try parseHelpT
+>       <|> try parseListT
+>       <|> try parseListUT
+>       <|> try parseAddUT
+>       <|> try parseShowT
+>       <|> try parseShowSolnT
+>       <|> try parseShowReviewsT
+>       <|> try parseSubmitT
+>       <|> try parseSubmitUT
+>       <|> try parseSubmitReviewT
+>       <|> try parseSubmitReviewUT
+>       <|> try parseUpdateT
+>       <|> try parseUpTaskT
+>       <|> try parseAssignT
+>       <|> try parseBuddyT
+>       <|> try parseShowAssignT
+>       <|> try parseSaveT
+>       <|> try parseLoadT
+>       <|> try parseRest
 
 > pTid :: Parser String
-> pTid =
->   do spaces
->      t <- many1 (noneOf " ")
->      spaces
->      return t
+> pTid = anid
 
 > pUid :: Parser String
-> pUid =
->   do spaces
->      t <- many1 $ letter <|> digit
->      spaces
->      return t
+> pUid = anid
 
-> pDate = 
->   do spaces
->      t <- many1 (noneOf " ") -- sorry no spaces.
->      spaces
->      return $ readTime defaultTimeLocale "%F" t
+> pFile :: Parser String
+> pFile = anid
 
-> parseRest :: Parser Cmd 
-> parseRest = many anyChar >>= return . TUnknown 
+> parseRest :: Parser Cmd
+> parseRest = fmap TUnknown (many anyChar)
 
+> pTwin :: Parser a -> Parser a' -> (a -> a' -> Parser b) -> Parser b
+> pTwin a a' fn = a >>= ((a' >>=) . fn)
 
-> parseCreate :: Parser Cmd 
-> parseCreate =
->   do istring "create"
->      tid <- pTid
->      content <- pT
->      return $ TCreate tid content
+> pTriple :: Parser a -> Parser a' -> Parser a'' -> (a -> a' -> a'' -> Parser b) -> Parser b
+> pTriple a a' a'' fn = a >>= ((a' >>=) . ((a'' >>=) .) . fn)
 
-> wordTwiz = spaces >> istring "twiz" >> spaces
+> parseCreate :: Parser Cmd
+> parseCreate = istring "create" >> pTwin pTid pT (return' . TCreate)
 
-> twizStr fn = wordTwiz >> fn
-> twizCmd fn = wordTwiz >> pTid >>= (\tid -> fn >> return tid)
+> wordTwiz = pWithSpace (istring "twiz")
 
-> parseListT :: Parser Cmd 
-> parseListT =twizStr $ istring "list" >> return TList
+> twizStr = (wordTwiz >>)
+> twizCmd fn = wordTwiz >> pTid >>= (fn >>) . return
 
-> parseHelpT :: Parser Cmd 
+> parseListT :: Parser Cmd
+> parseListT = twizStr $ istring "list" >> return TList
+
+> parseHelpT :: Parser Cmd
 > parseHelpT = istring "help" >> return THelp
 
-> parseListUT :: Parser Cmd 
+> parseListUT :: Parser Cmd
 > parseListUT = istring "allusers" >> return TListUsers
 
-> parseShowT :: Parser Cmd 
-> parseShowT = twizCmd (istring "show") >>= return . TShow
+> parseShowT :: Parser Cmd
+> parseShowT = fmap TShow $ twizCmd $ istring "show"
 
-> parseShowSolnT :: Parser Cmd 
-> parseShowSolnT =
->   do tid <- twizCmd (istring "get")
->      uid <- pUid
->      istring "solution"
->      return $ TShowSoln tid uid
+> parseShowSolnT :: Parser Cmd
+> parseShowSolnT = pTwin (twizCmd (istring "get")) ((istring "solution" >>) . return =<< pUid) (return' . TShowSoln)
 
-> parseShowReviewsT :: Parser Cmd 
-> parseShowReviewsT = twizCmd (istring "on") >>= return . TShowReviews 
+> parseShowReviewsT :: Parser Cmd
+> parseShowReviewsT = fmap TShowReviews (twizCmd (istring "reviews"))
 
+> parseSubmitT :: Parser Cmd
+> parseSubmitT = pTwin (twizCmd (istring "answer" >> spaces)) pT (return' . TSubmit)
 
+> parseSubmitUT :: Parser Cmd
+> parseSubmitUT = pTwin (twizCmd (istring "upload" >> spaces)) pFile (return' . TSubmitU)
 
-> parseSubmitT :: Parser Cmd 
-> parseSubmitT =
->   do tid <- twizCmd (istring "answer" >> spaces)
->      content <- pT
->      return $ TSubmit tid content
+> parseSubmitReviewT :: Parser Cmd
+> parseSubmitReviewT = pTriple (twizCmd (istring "for")) pUid (istring "review" >> pT) (return'' . TSubmitReview)
 
-> parseSubmitReviewT :: Parser Cmd 
-> parseSubmitReviewT =
->   do tid <- twizCmd (istring "for")
->      uid <- pUid
->      istring "review"
->      content <- pT
->      return $ TSubmitReview tid uid content
+> parseSubmitReviewUT :: Parser Cmd
+> parseSubmitReviewUT = pTriple (twizCmd (istring "for")) pUid (istring "upload" >> pFile) (return'' . TSubmitReviewU)
 
+> parseUIDLst :: Parser [String]
+> parseUIDLst = sepBy pUid (char ',')
 
-> parseAddUT :: Parser Cmd 
-> parseAddUT =
->   do istring "users"
->      spaces
->      lst <- sepBy pUid (char ',')
->      return $ TAddU lst
+> parseAddUT :: Parser Cmd
+> parseAddUT = fmap TAddU $ pWithSpace (istring "users") >> parseUIDLst
 
+> parseSaveT :: Parser Cmd
+> parseSaveT = fmap TSave $ istring "save" >> pFile
 
-> parseAssignT :: Parser Cmd 
-> parseAssignT =
->   do istring "update"
->      tid <- pTid
->      istring "assign"
->      uid <- pUid
->      istring "to"
->      lst <- sepBy pUid (char ',')
->      return $ TAssign tid uid lst
+> parseLoadT :: Parser Cmd
+> parseLoadT = fmap TLoad $ istring "load" >> pFile
 
-> parseShowAssignT :: Parser Cmd 
-> parseShowAssignT = twizCmd (istring "reviewers") >>= return . TShowAssign
+> parseBuddyT :: Parser Cmd
+> parseBuddyT = fmap TBuddy $ istring "buddies" >> pTid
 
+> parseUpdateTId :: Parser String
+> parseUpdateTId = istring "update" >> pTid
 
+> parseAssignT :: Parser Cmd
+> parseAssignT = pTriple parseUpdateTId (istring "assign" >> pUid) (istring "to" >> parseUIDLst) (return'' . TAssign)
 
-> parseUpdateT :: Parser Cmd 
-> parseUpdateT =
->   do istring "update"
->      tid <- pTid
->      istring "due"
->      due <- pDate
->      istring "review"
->      review <- pDate
->      return $ TUpdate tid due review
+> parseShowAssignT :: Parser Cmd
+> parseShowAssignT = fmap TShowAssign $ twizCmd $ istring "toreview"
 
-> parseUpTaskT :: Parser Cmd 
-> parseUpTaskT =
->   do istring "update"
->      tid <- pTid
->      istring "to"
->      spaces
->      next <- (string "task")<|>(string "review")<|>(string "closing")<|>(string "done")
->      return $ TUpdateTask tid (toSym next)
+> parseUpdateT :: Parser Cmd
+> parseUpdateT = pTriple parseUpdateTId (istring "due" >> pDate) (istring "review" >> pDate) (return'' . TUpdate)
+
+> parseUpTaskT :: Parser Cmd
+> parseUpTaskT = pTwin parseUpdateTId (istring "to" >> spaces >> next) (return' . TUpdateTask)
+>   where next = fmap toSym (string "task" <|> string "review" <|> string "closing" <|> string "setup")
 
