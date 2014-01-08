@@ -1,0 +1,2 @@
+:def v (\_ -> return ":e db/Bot.lhs \n :load db/Bot.lhs")
+:set -isrc:db -isrc:.
